@@ -1,24 +1,14 @@
-"""Entry point for the MCP layer.
-
-Run with:
-    python -m backend.mcp.server
-        -> stdio transport (default) — use this for Claude Desktop / Claude Code
-
-    MCP_TRANSPORT=streamable-http python -m backend.mcp.server
-        -> runs as a remote/host-able MCP server on MCP_HOST:MCP_PORT
-
-This module does not implement any tool logic. It imports the already-built
-unified toolkit from backend/__init__.py and exposes each tool over MCP.
-"""
 from __future__ import annotations
+import sys
+import os
+
+# Adds project root (Global-Rails) to Python's import path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import logging
-
 from mcp.server.fastmcp import FastMCP
-
-from . import config
-from .adapter import register_toolkit
-
+from backend.mcp import config
+from backend.mcp.adapter import register_toolkit 
 try:
     from backend import TOOLKIT
 except ImportError as exc:  # pragma: no cover
