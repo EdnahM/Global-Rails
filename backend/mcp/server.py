@@ -19,8 +19,10 @@ except ImportError as exc:  # pragma: no cover
         "    from .fetch_price.tool import fetch_price_tool\n"
         "    from .swap.tool import swap_tool\n"
         "    from .transfer.tool import transfer_tool\n"
-        "    from .x402.tool import x402_tool\n\n"
-        "    TOOLKIT = [fetch_price_tool, swap_tool, transfer_tool, x402_tool]"
+        "    from .off_ramp.tool import off_ramp_tool\n"
+        "    from .x402.tool import x402_get_invoice_tool, x402_settle_invoice_tool\n\n"
+        "    TOOLKIT = [fetch_price_tool, swap_tool, transfer_tool, off_ramp_tool,\n"
+        "               x402_get_invoice_tool, x402_settle_invoice_tool]"
     ) from exc
 
 logging.basicConfig(level=logging.INFO)
