@@ -1,6 +1,6 @@
 # MCP layer for the stablecoin/agent toolkit
 
-This adds an `mcp/` package under `backend/` that exposes your existing
+This adds an `mcp/` package under `backend/` that exposes
 `fetch_price`, `swap`, `transfer`, and `x402` tools over the Model Context
 Protocol, so Claude Desktop, Claude Code, or any other MCP client can call
 them directly — no LangChain/CrewAI agent loop required in between.
@@ -8,9 +8,9 @@ them directly — no LangChain/CrewAI agent loop required in between.
 ```
 backend/
 ├── interface.py
-├── fetch_price/ swap/ transfer/ x402/   # unchanged
-├── __init__.py                          # unchanged — must export TOOLKIT
-└── mcp/                                 # <-- new
+├── fetch_price/ swap/ transfer/ x402/ 
+├── __init__.py                          # — must export TOOLKIT
+└── mcp/                                 # 
     ├── __init__.py
     ├── config.py       # transport/host/port env vars
     ├── adapter.py       # generic BaseTool -> MCP tool bridge
@@ -36,7 +36,7 @@ backend/
      `run`/`execute`/`__call__` (sync or async, detected automatically).
    - builds an MCP tool whose parameters are the **flat fields** of the
      input schema (not nested under a `params` key), so a client calling
-     `fetch_price` sends `{"base": "USDC", "quote": "KES"}` directly.
+     `fetch_market_price` sends `{"token": "USDC", "quote": "KES"}` directly.
    - catches exceptions from the underlying tool and returns them as
      structured data (`{"error": ..., "type": ..., "tool": ...}`) instead
      of crashing the whole MCP server — one bad `swap` or `transfer` call
@@ -48,17 +48,29 @@ backend/
 
 ## Assumption about `backend/__init__.py`
 
-I don't have your actual file, so this expects something like:
+`server.py` expects `backend/__init__.py` to export a `TOOLKIT` — a list or
+dict of tool instances, each following the shared contract in
+`backend/interface.py` (`name`, `description`, `input_schema`, `execute`).
+The current toolkit exports:
 
 ```python
 # backend/__init__.py
 from .fetch_price.tool import fetch_price_tool
 from .swap.tool import swap_tool
 from .transfer.tool import transfer_tool
-from .x402.tool import x402_tool
+from .off_ramp.tool import off_ramp_tool
+from .x402.tool import x402_get_invoice_tool, x402_settle_invoice_tool
 
-TOOLKIT = [fetch_price_tool, swap_tool, transfer_tool, x402_tool]
-# a dict like {"fetch_price": fetch_price_tool, ...} also works
+TOOLKIT = {
+    "fetch_market_price": fetch_price_tool,
+    "transfer": transfer_tool,
+    "swap_tokens": swap_tool,
+    "off_ramp_payout": off_ramp_tool,
+    "x402_get_invoice": x402_get_invoice_tool,
+    "x402_settle_invoice": x402_settle_invoice_tool,
+}
+
+# a plain list [tool_a, tool_b, ...] also works
 ```
 
 If your export is named differently, either rename it to `TOOLKIT` or
@@ -104,19 +116,18 @@ mcp dev backend/mcp/server.py
 
 ## Things worth deciding before this hits production
 
-- **`x402`/L402 flows are often multi-step** (get a 402 + invoice, pay it,
-  retry with proof). If your current `x402/tool.py` bundles all of that
-  into one call, it maps onto MCP fine as-is. If you want an agent to be
-  able to *see* the invoice before paying, consider splitting it into two
-  MCP tools (e.g. `x402_get_invoice` / `x402_settle_invoice`) rather than
-  one opaque call — that's a design choice for `tool.py`, not something
-  this adapter needs to know about.
-- **`transfer` and `swap` move real money/assets.** Nothing here adds
-  confirmation, spend limits, or dry-run mode — if you want an
+- **`x402`/L402 flows are multi-step** (get a 402 + invoice, pay it, retry
+  with proof). The toolkit already splits this into two MCP tools so an
+  agent can *see* the invoice before paying: `x402_get_invoice` resolves a
+  402 challenge into an invoice, and `x402_settle_invoice` pays it and
+  returns the proof/auth header.
+- **`transfer`, `swap`, and `off_ramp` move real assets/money.** Nothing here
+  adds confirmation, spend limits, or dry-run mode — if you want an
   "are you sure" step before an MCP client can trigger a payout, that
-  belongs in `transfer/tool.py` (e.g. requiring an `idempotency_key` or a
-  separate `confirm=True` field in its schema), since MCP tools are
-  otherwise called directly without a human in the loop.
+  belongs in the tool's `tool.py` (e.g. requiring an `idempotency_key` or a
+  separate `confirm=True` field in its schema, as `transfer` already accepts
+  an `idempotency_key`), since MCP tools are otherwise called directly
+  without a human in the loop.
 - **mcp SDK v2 exists** (released 2026-07-28, renames `FastMCP` →
   `MCPServer`, moves `mcp.server.fastmcp` → `mcp.server.mcpserver`). This
   layer pins `mcp[cli]<2` deliberately since v2 is very new; migrating

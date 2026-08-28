@@ -1,36 +1,47 @@
-from langchain_core.tools import tool
+"""transfer tool: send stablecoins on-chain with a fixed USDC gas fee."""
+
 from pydantic import BaseModel, Field
-from backend.interface import BaseWorldRailsTool, ToolResult
-from backend.transfer.client import execute_mobile_payout
+
+from backend.chains import DEFAULT_CHAIN
+from backend.transfer.client import execute_transfer
+from backend.interface import BaseTool, ToolResult
+
 
 class TransferInput(BaseModel):
-    phone_number: str = Field(
-        description="Recipient mobile money number in international format without the plus, e.g., 254712345678"
-    )
-    amount: float = Field(description="Amount in local fiat currency to payout")
-    currency: str = Field(default="KES", description="Target currency code (e.g., KES, NGN, GHS)")
+    to_address: str = Field(description="Destination address (0x...) to receive the stablecoins")
+    token: str = Field(default="USDC", description="Stablecoin symbol to send (USDC, USDT)")
+    amount: float = Field(description="Amount of the token to send")
+    chain: str = Field(default=DEFAULT_CHAIN, description="Network to transfer on (currently avalanche)")
+    idempotency_key: str | None = Field(default=None, description="Optional key to make the transfer idempotent / confirmable")
+    pays_gas_in: str = Field(default="USDC", description="Asset used to settle gas via paymaster (USDC by default)")
 
-class TransferSkill(BaseWorldRailsTool):
-    name = "mobile_money_payout"
-    description = "Triggers a last-mile mobile money (M-Pesa / MTN) payout to a recipient phone number."
 
-    def execute(self, phone_number: str, amount: float, currency: str = "KES") -> ToolResult:
+class TransferTool(BaseTool):
+    name = "transfer"
+    description = "Send stablecoins (USDC/USDT) from an agent wallet to a destination address on the given chain, with a fixed USDC gas fee."
+    input_schema = TransferInput
+
+    def execute(
+        self,
+        to_address: str,
+        amount: float,
+        token: str = "USDC",
+        chain: str = DEFAULT_CHAIN,
+        idempotency_key: str | None = None,
+        pays_gas_in: str = "USDC",
+    ) -> ToolResult:
         try:
-            payout_res = execute_mobile_payout(
-                phone_number=phone_number, 
-                amount_fiat=amount, 
-                currency=currency
+            data = execute_transfer(
+                to_address=to_address,
+                token=token,
+                amount=amount,
+                chain=chain,
+                idempotency_key=idempotency_key,
+                pays_gas_in=pays_gas_in,
             )
-            return ToolResult(success=True, data=payout_res)
-        
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            return ToolResult(success=True, data=data)
+        except Exception as exc:
+            return ToolResult(success=False, error=str(exc))
 
-@tool("mobile_money_payout", args_schema=TransferInput)
-def transfer_tool(phone_number: str, amount: float, currency: str = "KES") -> str:
-    """Triggers an automated fiat payout directly to a local mobile money wallet (M-Pesa, MTN)."""
-    skill = TransferSkill()
-    res = skill.execute(phone_number=phone_number, amount=amount, currency=currency)
-    
-    # Returning the serialized string so LangChain/CrewAI can parse the JSON
-    return res.to_string()
+
+transfer_tool = TransferTool()

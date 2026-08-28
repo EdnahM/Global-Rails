@@ -1,57 +1,65 @@
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
 
+
 class ToolResult(BaseModel):
-    """Standardized response format for all World Rails SDK tools."""
-    success: bool = Field(description="Indicates if the tool execution was successful")
-    data: Dict[str, Any] = Field(default_factory=dict, description="Payload containing the result of the tool execution")
-    error: Optional[str] = Field(default=None, description="Error message if the execution failed")
+    """Standardized response for every Global Rails backend tool.
+
+    Every tool returns one of these so the MCP adapter (and any downstream
+    LangChain/CrewAI/agent host) sees the same shape regardless of which
+    tool was called: a success flag, a structured data payload, and an
+    optional error message.
+    """
+
+    success: bool = Field(description="Whether the tool executed successfully")
+    data: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured payload returned by the tool",
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message when execution failed"
+    )
 
     def to_string(self) -> str:
-        """Serializes the result to a JSON-formatted string for LLMs."""
-        return json.dumps(self.model_dump(), indent=2)
+        """Serialize the result to a JSON string for LLM/agent consumption."""
+        return json.dumps(self.model_dump(mode="json"), indent=2)
 
-class BaseWorldRailsTool(ABC):
-    """Abstract Base Class for all tools in the World Rails SDK."""
-    name: str
-    description: str
+    def to_dict(self) -> Dict[str, Any]:
+        """Return the result as a plain dict (JSON-safe) for MCP clients."""
+        return self.model_dump(mode="json")
+
+
+class BaseTool(ABC):
+    """Abstract base class for all Global Rails backend tools.
+
+    Every concrete tool exposes:
+
+      * 'name'          - unique tool identifier surfaced over MCP
+      * 'description'   - human/AI-facing summary of what the tool does
+      * 'input_schema'  - a pydantic model describing the tool's arguments
+      * 'execute()'     - the sync entry point returning a 'ToolResult'
+
+    This contract is intentionally dependency-free (pure pydantic). The MCP
+    adapter in 'backend/mcp/adapter.py' discovers 'input_schema' and
+    'execute' automatically, so adding a new tool only requires subclassing
+    this class and registering its instance in 'backend/__init__.py'.
+    """
+
+    name: str = ""
+    description: str = ""
+    input_schema: Optional[type[BaseModel]] = None
 
     @abstractmethod
     def execute(self, **kwargs: Any) -> ToolResult:
-        pass
+        """Execute the tool and return a standardized 'ToolResult'."""
+        raise NotImplementedError
 
+    # -- Async convenience: the MCP adapter calls sync 'execute' in a
+    # -- thread, so subclasses only need to implement the sync method above.
+    async def aexecute(self, **kwargs: Any) -> ToolResult:
+        import asyncio
 
-# =====================================================================
-# QUICK SELF-TEST BLOCK
-# =====================================================================
-if __name__ == "__main__":
-    print("--- Testing interface.py Base Contracts ---\n")
-
-    # 1. Create a mock tool using the NEW interface contract name
-    class MockPaymentTool(BaseWorldRailsTool):
-        name = "mock_payout"
-        description = "Mocks a payment execution for testing."
-
-        def execute(self, amount: float, recipient: str) -> ToolResult:
-            if amount <= 0:
-                return ToolResult(success=False, error="Amount must be greater than 0")
-            return ToolResult(
-                success=True,
-                data={"transaction_id": "TX_12345", "amount": amount, "recipient": recipient}
-            )
-
-    tool = MockPaymentTool()
-
-    # 2. Test Success Execution
-    success_response = tool.execute(amount=50.0, recipient="+254712345678")
-    print("Test 1 (Success Case Output):")
-    print(success_response.to_string())
-
-    # 3. Test Failure Execution
-    failure_response = tool.execute(amount=-10.0, recipient="+254712345678")
-    print("\nTest 2 (Failure Case Output):")
-    print(failure_response.to_string())
-    print("\n Interface definitions verified successfully!")
-    
+        return await asyncio.to_thread(self.execute, **kwargs)
