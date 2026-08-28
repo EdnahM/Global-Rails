@@ -1,0 +1,13 @@
+.claude
+.pytest_cache
+.venv
+__pycache__/
+.venv/
+.claude/
+.env
+..gitignore.swp
+backend/venv/
+backend/__pycache__
+*__pycache__
+backend/swap/__pycache__
+
