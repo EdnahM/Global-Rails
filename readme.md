@@ -1,4 +1,4 @@
-# 🌍 African Rails: The Financial SDK for Autonomous AI Agents
+# 🌍 Global Rails: The Financial SDK for Autonomous AI Agents
 
 [![PyPI version](https://img.shields.io/pypi/v/african-rails.svg)](https://pypi.org/project/african-rails/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -6,7 +6,7 @@
 [![LangChain Compatible](https://img.shields.io/badge/LangChain-Compatible-green.svg)](https://python.langchain.com/)
 [![CrewAI Compatible](https://img.shields.io/badge/CrewAI-Compatible-orange.svg)](https://crewai.com/)
 
-**African Rails** is a developer-first Python SDK designed to give autonomous AI agents native financial capabilities across the African continent. 
+**Global Rails** is a developer-first Python SDK designed to give autonomous AI agents native financial capabilities across the African continent. 
 
 Traditional mobile money APIs (like Daraja) are built for human-in-the-loop workflows—requiring registered businesses, KRA PINs, and manual KYB. **African Rails bypasses this friction.** By sitting on top of Web3-to-fiat infrastructure (Kotani Pay, HoneyCoin, Swypt, Eversend), this SDK provides your LangChain or CrewAI agents with programmatic, machine-native financial execution—from on-chain token swaps to last-mile M-Pesa payouts.
 
