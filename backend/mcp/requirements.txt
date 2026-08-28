@@ -1,0 +1,9 @@
+# MCP layer dependency. Pinned below 2.0: the official SDK shipped a v2
+# (2026-07-28) that renames FastMCP -> MCPServer and moves the import path
+# to mcp.server.mcpserver. v1.x is Anthropic's maintained line and is what
+# this adapter (backend/mcp/server.py, backend/mcp/adapter.py) targets.
+# If you want to move to v2 later, the only file that needs to change is
+# backend/mcp/server.py's import + FastMCP(...) constructor call — the
+# decorator/registration API (add_tool) is unaffected.
+mcp[cli]>=1.8,<2
+pydantic>=2
