@@ -35,6 +35,8 @@ _registered = register_toolkit(mcp, _toolkit_items)
 logger.info("Registered %d MCP tools: %s", len(_registered), ", ".join(_registered))
 
 
+app = mcp.http_app(path="/api/mcp")
+
 def main() -> None:
     mcp.run(transport=config.MCP_TRANSPORT)
 
