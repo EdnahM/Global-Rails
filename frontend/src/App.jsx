@@ -13,35 +13,62 @@ function App() {
 
   const [input, setInput] = useState("");
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
+ const sendMessage = async () => {
+  if (!input.trim()) return;
 
-    const userText = input.trim();
+  const userText = input.trim();
+
+  setMessages((current) => [
+    ...current,
+    {
+      role: "user",
+      text: userText,
+    },
+  ]);
+
+  setInput("");
+
+  try {
+    const response = await fetch("http://localhost:8000/tool/fetch_market_price", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token: "USDC",
+        quote: "KES",
+      }),
+    });
+
+    const result = await response.json();
+
+    let agentText;
+
+    if (result.success) {
+      agentText = `USDC/KES market data: ${JSON.stringify(result.data)}`;
+    } else {
+      agentText = `I couldn't fetch the market price: ${result.error || "Unknown error"}`;
+    }
 
     setMessages((current) => [
       ...current,
       {
-        role: "user",
-        text: userText,
+        role: "agent",
+        text: agentText,
       },
     ]);
-
-    setInput("");
-
-    setTimeout(() => {
-      setMessages((current) => [
-        ...current,
-        {
-          role: "agent",
-          text: "I understand the request. My financial tools will execute this through the Global Rails backend once connected.",
-        },
-      ]);
-    }, 600);
-  };
-
-  const useSuggestion = (text) => {
+  } catch (error) {
+    setMessages((current) => [
+      ...current,
+      {
+        role: "agent",
+        text: `I couldn't connect to the Global Rails backend: ${error.message}`,
+      },
+    ]);
+  }
+};
     setInput(text);
-  };
+  }; 
 
   const navigation = [
     { name: "Overview", icon: "⌂" },
