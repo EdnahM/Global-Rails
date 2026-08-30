@@ -148,7 +148,11 @@ function App() {
   }
 };
 
+<<<<<<< Updated upstream
   const applySuggestion = (text) => {
+=======
+  const useSuggestion = (text) => {
+>>>>>>> Stashed changes
     setInput(text);
   };
 
