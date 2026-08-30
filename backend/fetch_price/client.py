@@ -21,6 +21,13 @@ COINGECKO_IDS = {
 
 COINGECKO_BASE = "https://api.coingecko.com/api/v3/simple/price"
 
+# Fiat currencies this oracle prices against, via CoinGecko. `quote.isupper()`
+# alone can't tell a fiat code apart from a token ticker (both are
+# conventionally uppercase — "KES" and "USDT" are both `.isupper() == True`),
+# so route on an explicit allowlist instead. Extend this as more local
+# currencies are supported (the SDK's whole pitch is KES/NGN/GHS).
+FIAT_CURRENCIES = {"USD", "KES", "NGN", "GHS"}
+
 
 def _fiat_quote(token: str, fiat: str) -> float:
     """Return token->fiat rate via CoinGecko (public fallback oracle)."""
@@ -55,11 +62,12 @@ def get_market_price(token: str = "USDC", quote: str = "USD", chain: str = "aval
     """
     chain_cfg = get_chain(chain)
     t = token.upper()
+    q = quote.upper()
 
-    if quote.isupper() and quote not in ("USD",):
-        rate = _token_quote(t, quote)
+    if q in FIAT_CURRENCIES:
+        rate = _fiat_quote(t, q)
     else:
-        rate = _fiat_quote(t, quote)
+        rate = _token_quote(t, q)
 
     return {
         "token": t,
