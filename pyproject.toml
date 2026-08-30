@@ -1,2 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+# No top-level installable package here — this pyproject.toml exists only
+# to declare dependencies + the Vercel entrypoint. Without this, a plain
+# `pip install .` fails with an ambiguous package-discovery error, since
+# setuptools tries to auto-detect a package and finds both backend/ and
+# frontend/ at the root with no clear winner.
+[tool.setuptools]
+py-modules = []
+
+[project]
+name = "african-rails-mcp"
+version = "0.1.0"
+description = "Blockchain payment infrastructure MCP for African AI agents"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "uvicorn>=0.24.0",
+    "web3>=7.0.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "eth-account>=0.13.0",
+    "python-dotenv>=1.0.0",
+    "x402>=0.3.0",
+]
+
+# This file — the one at the project root — is what Vercel actually reads
+# for both the entrypoint below AND the dependencies above. A second,
+# separate pyproject.toml exists at backend/pyproject.toml for local
+# packaging/dev (hatchling build, pytest config, etc.) — Vercel never reads
+# that one, so both files need to be kept in sync if dependencies change.
+# See backend/pyproject.toml's own comment for the reverse pointer.
 [tool.vercel]
-entrypoint = "backend.src.african_rails_mcp.server:app"   
+entrypoint = "backend.src.african_rails_mcp.server:app"
