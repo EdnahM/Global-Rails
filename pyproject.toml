@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "backend.api.server:app"   
+entrypoint = "backend.src.africa_rails_mcp.server:app"   
