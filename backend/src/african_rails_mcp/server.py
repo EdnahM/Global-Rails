@@ -37,9 +37,13 @@ mcp.add_tool(check_x402_price)
 mcp.add_tool(get_x402_wallet_info)
 
 
+# --- Vercel ASGI entrypoint ---
+app = mcp.http_app()
+
+
 def main():
     mcp.run()
 
 
 if __name__ == "__main__":
-    main()
+    main()   
