@@ -1,3 +1,22 @@
-# Global Rails backend toolkit
+# Global Rails backend toolkit — single source of truth for the "backend"
+# Vercel service (root: "backend" in vercel.json). Vercel installs from
+# THIS file; a dependency listed only in a nested requirements.txt (e.g.
+# backend/mcp/requirements.txt) will NOT be installed for the deployed
+# service, which is what broke the mcp/server.py import in production.
 requests>=2.28
 pydantic>=2
+
+# MCP layer. Pinned below 2.0: the official SDK shipped a v2 (2026-07-28)
+# that renames FastMCP -> MCPServer and moves the import path to
+# mcp.server.mcpserver. v1.x is what backend/mcp/server.py + adapter.py
+# target. If you move to v2 later, only backend/mcp/server.py's import +
+# FastMCP(...) construction (and the streamable_http_app/custom_route calls)
+# need to change.
+mcp[cli]>=1.8,<2
+
+# REST convenience layer (backend/api.py, backend/rest_handlers.py). Used
+# directly by the frontend's fetch() calls in production (via the routes
+# backend/mcp/server.py registers with @mcp.custom_route), and also lets
+# backend/api.py run standalone locally with `uvicorn backend.api:app`.
+fastapi>=0.110
+uvicorn>=0.29

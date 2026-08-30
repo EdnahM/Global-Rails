@@ -1,55 +1,87 @@
-"""On-chain token swap client (multi-chain).
+"""Price oracle for Global Rails.
 
-Routes a token-to-token swap through a DEX aggregator on the requested
-chain. Currently simulated; the aggregator call (e.g. 1inch) can be wired
-without changing the tool surface.
+Fetches real-time exchange rates for crypto tokens and fiat currencies in a
+chain-agnostic way. The default path uses CoinGecko as a public fallback
+oracle; it can be extended to read on-chain DEX pools per chain without
+changing the tool surface.
 """
 
-import uuid
+import requests
 
-from backend.chains import DEFAULT_CHAIN, get_chain
+from backend.chains import CHAINS, get_chain
+
+# CoinGecko asset ids keyed by token symbol (used by the fiat oracle).
+COINGECKO_IDS = {
+    "USDC": "usd-coin",
+    "USDT": "tether",
+    "AVAX": "avalanche-2",
+    "ETH": "ethereum",
+    "POL": "matic-network",
+}
+
+COINGECKO_BASE = "https://api.coingecko.com/api/v3/simple/price"
+
+# Fiat currencies this oracle prices against, via CoinGecko. `quote.isupper()`
+# alone can't tell a fiat code apart from a token ticker (both are
+# conventionally uppercase — "KES" and "USDT" are both `.isupper() == True`),
+# so route on an explicit allowlist instead. Extend this as more local
+# currencies are supported (the SDK's whole pitch is KES/NGN/GHS).
+FIAT_CURRENCIES = {"USD", "KES", "NGN", "GHS"}
 
 
-def execute_token_swap(
-    from_token: str,
-    to_token: str,
-    amount: float,
-    slippage_percent: float = 0.5,
-    chain: str = DEFAULT_CHAIN,
-) -> dict:
-    """Swap 'amount' of 'from_token' to 'to_token' on 'chain'.
+def _fiat_quote(token: str, fiat: str) -> float:
+    """Return token->fiat rate via CoinGecko (public fallback oracle)."""
+    coin_id = COINGECKO_IDS.get(token.upper(), COINGECKO_IDS["USDC"])
+    url = f"{COINGECKO_BASE}?ids={coin_id}&vs_currencies={fiat.lower()}"
+    res = requests.get(url, timeout=10)
+    res.raise_for_status()
+    data = res.json()
+    return float(data.get(coin_id, {}).get(fiat.lower(), 1.0))
 
-    Returns simulated routing metadata plus a quote of the expected output.
+
+def _token_quote(base: str, quote: str) -> float:
+    """Return a token->token rate placeholder.
+
+    Stablecoin pairs are ~1:1. This mirrors the current simulated routing
+    (see backend/swap); an on-chain DEX pool read would replace the constant
+    when the swap integration is wired up.
+    """
+    b, q = base.upper(), quote.upper()
+    if {b, q} <= {"USDC", "USDT", "USDC.E", "USDT.E"}:
+        return 1.0
+    return 1.0
+
+
+def get_market_price(token: str = "USDC", quote: str = "USD", chain: str = "avalanche") -> dict:
+    """Fetch a price for 'token' relative to 'quote' on 'chain'.
+
+    - 'quote' in {"USD", "KES", "NGN", "GHS", ...} and the reference coin is
+      quoted in fiat via CoinGecko.
+    - 'quote' as a token symbol enables token-vs-token prices.
+    Returns a dict compatible with the shared ToolResult payload contract.
     """
     chain_cfg = get_chain(chain)
-    tx_hash = f"0x{uuid.uuid4().hex}{uuid.uuid4().hex[:32]}"
+    t = token.upper()
+    q = quote.upper()
 
-    from_sym = from_token.upper()
-    to_sym = to_token.upper()
-    # Stablecoin pairs route ~1:1; non-stable pairs get a small simulated
-    # slippage-adjusted rate until a real DEX quote/route is wired.
-    rate = 1.0 if ({from_sym, to_sym} <= {"USDC", "USDT", "USDC.E", "USDT.E"}) else 0.98
-    expected_out = round(amount * rate, 4)
-
-    # ---------------------------------------------------------------------
-    # PRODUCTION INTEGRATION EXAMPLE (e.g., 1inch / other aggregator)
-    # ---------------------------------------------------------------------
-    # quote = requests.get(
-    #     f"https://api.1inch.dev/swap/v5.2/{chain_cfg.chain_id}/swap"
-    #     f"?src={from_sym}&dst={to_sym}&amount={amount}&slippage={slippage_percent}"
-    # )
-    # tx = send_raw_transaction(quote.json()["tx"])
-    # ---------------------------------------------------------------------
+    if q in FIAT_CURRENCIES:
+        rate = _fiat_quote(t, q)
+    else:
+        rate = _token_quote(t, q)
 
     return {
-        "status": "CONFIRMED",
-        "tx_hash": tx_hash,
-        "from_token": from_sym,
-        "to_token": to_sym,
-        "amount_in": amount,
-        "amount_out": expected_out,
-        "slippage_tolerance": f"{slippage_percent}%",
+        "token": t,
+        "quote": quote.upper(),
         "chain": chain_cfg.name,
         "chain_id": chain_cfg.chain_id,
-        "native_asset": chain_cfg.native_asset,
+        "rate": rate,
+        "source": "coingecko",
     }
+
+
+def supported_chains() -> list:
+    """List of chains the price oracle can report prices for."""
+    return [
+        {"name": c.name, "chain_id": c.chain_id, "stablecoins": list(c.stablecoins)}
+        for c in CHAINS.values()
+    ]

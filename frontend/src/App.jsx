@@ -1,6 +1,87 @@
 import { useState } from "react";
 import "./App.css";
 
+// Maps a free-text request to one of the backend's registered tools plus its
+// payload, and how to describe a successful result. This is a lightweight
+// keyword/regex router, not an LLM call — it's what lets each quick-reply
+// suggestion (and reasonable free-typed variants) actually hit a different
+// tool instead of every message calling fetch_market_price regardless of
+// what was typed. Swapping this for a real LLM tool-call later only means
+// replacing the body of this function; sendMessage() and the fetch call
+// don't need to change.
+function pickToolFromMessage(text) {
+  // "Swap 100 USDT to USDC"
+  const swapMatch = text.match(
+    /swap\s+([\d.]+)\s*([a-zA-Z.]+)\s+(?:to|for|into)\s+([a-zA-Z.]+)/i
+  );
+  if (swapMatch) {
+    return {
+      tool: "swap_tokens",
+      payload: {
+        amount: parseFloat(swapMatch[1]),
+        from_token: swapMatch[2].toUpperCase(),
+        to_token: swapMatch[3].toUpperCase(),
+      },
+      describe: (d) =>
+        `Swapped ${d.amount_in} ${d.from_token} for ${d.amount_out} ${d.to_token} on ${d.chain} (tx ${d.tx_hash.slice(0, 10)}...).`,
+    };
+  }
+
+  // "Send 20 USDC to M-Pesa"
+  if (/m-?pesa|momo|mobile money|off.?ramp|payout/i.test(text)) {
+    const amountMatch = text.match(/([\d.]+)\s*([a-zA-Z]+)/);
+    return {
+      tool: "off_ramp_payout",
+      payload: {
+        amount: amountMatch ? parseFloat(amountMatch[1]) : 20,
+        currency: "KES",
+        phone_number: "254700000000", // demo recipient — testnet/simulated only
+      },
+      describe: (d) =>
+        `Paid out ${d.amount_delivered} ${d.currency} to ${d.recipient} via ${d.network} (ref ${d.transaction_id}).`,
+    };
+  }
+
+  // "Pay the x402 request"
+  if (/x402|invoice|payment request/i.test(text)) {
+    return {
+      tool: "x402_get_invoice",
+      payload: { url: "https://example.com/protected-resource", token: "USDC" },
+      describe: (d) =>
+        `Resolved invoice ${d.invoice_id}: ${d.amount} ${d.token} on ${d.chain} (status ${d.status}).`,
+    };
+  }
+
+  // An explicit destination address implies a transfer.
+  const addressMatch = text.match(/0x[a-fA-F0-9]{6,}/);
+  if (addressMatch) {
+    const amountMatch = text.match(/([\d.]+)\s*([a-zA-Z]+)/);
+    return {
+      tool: "transfer",
+      payload: {
+        to_address: addressMatch[0],
+        amount: amountMatch ? parseFloat(amountMatch[1]) : 1,
+        token: amountMatch ? amountMatch[2].toUpperCase() : "USDC",
+      },
+      describe: (d) =>
+        `Sent ${d.amount} ${d.token} to ${d.to_address} (gas ${d.gas_fee_usdc} USDC).`,
+    };
+  }
+
+  // Default: a price/rate lookup. Try to pull a "X to Y" or "X/Y" pair out
+  // of the text; otherwise fall back to USDC/KES.
+  const pairMatch = text.match(
+    /\b([a-zA-Z]{2,6})\b\s*(?:\/|to|vs\.?)\s*\b([a-zA-Z]{2,6})\b/i
+  );
+  const token = pairMatch ? pairMatch[1].toUpperCase() : "USDC";
+  const quote = pairMatch ? pairMatch[2].toUpperCase() : "KES";
+  return {
+    tool: "fetch_market_price",
+    payload: { token, quote },
+    describe: (d) => `1 ${d.token} = ${d.rate} ${d.quote} on ${d.chain}.`,
+  };
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Overview");
 
@@ -28,27 +109,26 @@ function App() {
 
   setInput("");
 
+  const { tool, payload, describe } = pickToolFromMessage(userText);
+
   try {
-    const response = await fetch("http://localhost:8000/tool/fetch_market_price", {
+    // Relative path: routed to the backend service in both local dev
+    // (via a dev proxy) and production (via the "/api" rewrite in
+    // vercel.json) — a hardcoded localhost URL only ever works on one
+    // machine.
+    const response = await fetch(`/api/tool/${tool}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        token: "USDC",
-        quote: "KES",
-      }),
+      body: JSON.stringify(payload),
     });
 
     const result = await response.json();
 
-    let agentText;
-
-    if (result.success) {
-      agentText = `USDC/KES market data: ${JSON.stringify(result.data)}`;
-    } else {
-      agentText = `I couldn't fetch the market price: ${result.error || "Unknown error"}`;
-    }
+    const agentText = result.success
+      ? describe(result.data)
+      : `I couldn't complete that (${tool}): ${result.error || "Unknown error"}`;
 
     setMessages((current) => [
       ...current,
@@ -67,8 +147,10 @@ function App() {
     ]);
   }
 };
+
+  const applySuggestion = (text) => {
     setInput(text);
-  }; 
+  };
 
   const navigation = [
     { name: "Overview", icon: "⌂" },
@@ -207,7 +289,7 @@ function App() {
                 <div className="chat-suggestions">
                   <button
                     onClick={() =>
-                      useSuggestion(
+                      applySuggestion(
                         "What's the current USDC to KES rate?"
                       )
                     }
@@ -217,7 +299,7 @@ function App() {
 
                   <button
                     onClick={() =>
-                      useSuggestion(
+                      applySuggestion(
                         "Swap 100 USDT to USDC"
                       )
                     }
@@ -227,7 +309,7 @@ function App() {
 
                   <button
                     onClick={() =>
-                      useSuggestion(
+                      applySuggestion(
                         "Send 20 USDC to M-Pesa"
                       )
                     }
@@ -237,7 +319,7 @@ function App() {
 
                   <button
                     onClick={() =>
-                      useSuggestion(
+                      applySuggestion(
                         "Pay the x402 request"
                       )
                     }

@@ -16,3 +16,10 @@ MCP_TRANSPORT = os.getenv("MCP_TRANSPORT", "stdio")
 
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8765"))
+
+# Path the Streamable HTTP MCP transport is served on. Vercel's rewrite in
+# vercel.json forwards the full "/api/..." path to this service unchanged
+# (it isn't stripped), so this has to 
+# include the "/api" prefix to match
+# what a client actually requests in production.
+MCP_HTTP_PATH = os.getenv("MCP_HTTP_PATH", "/api/mcp")
