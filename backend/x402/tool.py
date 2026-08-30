@@ -8,9 +8,9 @@ returning a proof-of-payment header.
 
 from pydantic import BaseModel, Field
 
-from backend.chains import DEFAULT_CHAIN
-from backend.x402.client import get_invoice, settle_invoice
-from backend.interface import BaseTool, ToolResult
+from chains import DEFAULT_CHAIN
+from x402.client import get_invoice, settle_invoice
+from interface import BaseTool, ToolResult
 
 
 class X402GetInvoiceInput(BaseModel):

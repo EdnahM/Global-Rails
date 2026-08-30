@@ -12,7 +12,7 @@ changing the tool surface.
 
 import uuid
 
-from backend.chains import DEFAULT_CHAIN, get_chain, quote_gas_fee_usdc
+from chains import DEFAULT_CHAIN, get_chain, quote_gas_fee_usdc
 
 
 def execute_transfer(

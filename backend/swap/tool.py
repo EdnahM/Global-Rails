@@ -5,9 +5,9 @@
 
 from pydantic import BaseModel, Field
 
-from backend.chains import DEFAULT_CHAIN
-from backend.swap.client import execute_token_swap
-from backend.interface import BaseTool, ToolResult
+from chains import DEFAULT_CHAIN
+from swap.client import execute_token_swap
+from interface import BaseTool, ToolResult
 
 
 class SwapInput(BaseModel):

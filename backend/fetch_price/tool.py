@@ -2,9 +2,9 @@
 
 from pydantic import BaseModel, Field
 
-from backend.chains import DEFAULT_CHAIN
-from backend.fetch_price.client import get_market_price
-from backend.interface import BaseTool, ToolResult
+from chains import DEFAULT_CHAIN
+from fetch_price.client import get_market_price
+from interface import BaseTool, ToolResult
 
 
 class FetchPriceInput(BaseModel):

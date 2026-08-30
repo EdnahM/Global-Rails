@@ -13,7 +13,7 @@ import asyncio
 from pydantic import BaseModel
 from mcp.server.fastmcp import FastMCP
 
-from backend.mcp.adapter import register_toolkit
+from mcp.adapter import register_toolkit
 
 
 class FetchPriceInput(BaseModel):

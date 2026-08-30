@@ -2,9 +2,9 @@
 
 from pydantic import BaseModel, Field
 
-from backend.chains import DEFAULT_CHAIN
-from backend.transfer.client import execute_transfer
-from backend.interface import BaseTool, ToolResult
+from chains import DEFAULT_CHAIN
+from transfer.client import execute_transfer
+from interface import BaseTool, ToolResult
 
 
 class TransferInput(BaseModel):

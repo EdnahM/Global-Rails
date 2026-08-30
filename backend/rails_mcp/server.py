@@ -1,35 +1,30 @@
 from __future__ import annotations
-import sys
-import os
-
-# Adds project root (Global-Rails) to Python's import path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import logging
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from backend.mcp import config
-from backend.mcp.adapter import register_toolkit
-from backend.rest_handlers import execute_tool_payload, health_payload, list_tools_payload
+from rails_mcp import config
+from rails_mcp.adapter import register_toolkit
+from rest_handlers import execute_tool_payload, health_payload, list_tools_payload
 try:
-    from backend import TOOLKIT
+    from toolkit import TOOLKIT
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "Could not import TOOLKIT from backend/__init__.py. Make sure "
-        "backend/__init__.py exports the combined list (or dict) of tool "
+        "Could not import TOOLKIT from backend/toolkit.py. Make sure "
+        "backend/toolkit.py exports the combined list (or dict) of tool "
         "instances, e.g.:\n\n"
-        "    from .fetch_price.tool import fetch_price_tool\n"
-        "    from .swap.tool import swap_tool\n"
-        "    from .transfer.tool import transfer_tool\n"
-        "    from .off_ramp.tool import off_ramp_tool\n"
-        "    from .x402.tool import x402_get_invoice_tool, x402_settle_invoice_tool\n\n"
+        "    from fetch_price.tool import fetch_price_tool\n"
+        "    from swap.tool import swap_tool\n"
+        "    from transfer.tool import transfer_tool\n"
+        "    from off_ramp.tool import off_ramp_tool\n"
+        "    from x402.tool import x402_get_invoice_tool, x402_settle_invoice_tool\n\n"
         "    TOOLKIT = [fetch_price_tool, swap_tool, transfer_tool, off_ramp_tool,\n"
         "               x402_get_invoice_tool, x402_settle_invoice_tool]"
     ) from exc
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("backend.mcp.server")
+logger = logging.getLogger("rails_mcp.server")
 
 # NOTE on streamable_http_path: this mcp[cli]<2 (mcp.server.fastmcp.FastMCP)
 # has no `http_app(path=...)` method — that's the API of the separate
@@ -83,4 +78,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    

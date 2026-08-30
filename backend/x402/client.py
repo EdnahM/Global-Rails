@@ -12,7 +12,7 @@ same.
 
 import uuid
 
-from backend.chains import DEFAULT_CHAIN, get_chain
+from chains import DEFAULT_CHAIN, get_chain
 
 
 def get_invoice(url: str, token: str = "USDC", amount: float = 1.0, chain: str = DEFAULT_CHAIN) -> dict:

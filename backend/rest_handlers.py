@@ -9,7 +9,7 @@ and both surfaces stay in sync automatically.
 """
 from typing import Any, Dict
 
-from backend import TOOLKIT
+from toolkit import TOOLKIT
 
 
 def get_tools() -> Dict[str, Any]:

@@ -2,8 +2,8 @@
 
 from pydantic import BaseModel, Field
 
-from backend.off_ramp.client import execute_mobile_payout
-from backend.interface import BaseTool, ToolResult
+from off_ramp.client import execute_mobile_payout
+from interface import BaseTool, ToolResult
 
 
 class OffRampInput(BaseModel):

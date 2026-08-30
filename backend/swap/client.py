@@ -7,7 +7,7 @@ without changing the tool surface.
 
 import uuid
 
-from backend.chains import DEFAULT_CHAIN, get_chain
+from chains import DEFAULT_CHAIN, get_chain
 
 
 def execute_token_swap(

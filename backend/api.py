@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend import TOOLKIT
+from toolkit import TOOLKIT
 
 app = FastAPI(title="Global Rails API")
 

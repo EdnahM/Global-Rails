@@ -8,7 +8,7 @@ changing the tool surface.
 
 import requests
 
-from backend.chains import CHAINS, get_chain
+from chains import CHAINS, get_chain
 
 # CoinGecko asset ids keyed by token symbol (used by the fiat oracle).
 COINGECKO_IDS = {
