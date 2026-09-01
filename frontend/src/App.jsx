@@ -1,5 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
+import { callTool } from "./api";
+import MarketDataPage from "./pages/MarketDataPage";
+import WalletPage from "./pages/WalletPage";
+import SwapPage from "./pages/SwapPage";
+import TransferPage from "./pages/TransferPage";
+import X402Page from "./pages/X402Page";
+import ActivityPage from "./pages/ActivityPage";
+import DeveloperPage from "./pages/DeveloperPage";
 
 // Maps a free-text request to one of the backend's registered tools plus its
 // payload, and how to describe a successful result. This is a lightweight
@@ -82,6 +90,18 @@ function pickToolFromMessage(text) {
   };
 }
 
+// Icon + display title per tool, used when logging a successful call (from
+// chat, either routing path, or a dedicated page) into the shared activity
+// feed that Overview, the Activity page, and LAST EXECUTION all read from.
+const TOOL_META = {
+  fetch_market_price: { icon: "◈", title: "Market Data" },
+  swap_tokens: { icon: "⇄", title: "Token Swap" },
+  transfer: { icon: "↗", title: "Transfer" },
+  off_ramp_payout: { icon: "↗", title: "M-Pesa Payout" },
+  x402_get_invoice: { icon: "₿", title: "x402 Invoice" },
+  x402_settle_invoice: { icon: "₿", title: "x402 Payment" },
+};
+
 function App() {
   const [activePage, setActivePage] = useState("Overview");
 
@@ -93,6 +113,45 @@ function App() {
   ]);
 
   const [input, setInput] = useState("");
+
+  // Shared across the AI Agent chat (both the Groq path and the keyword
+  // fallback) and every dedicated tool page, so Overview, the Activity
+  // page, and the "LAST EXECUTION" panel all reflect the same real history
+  // no matter which surface triggered the call.
+  const [activities, setActivities] = useState([]);
+
+  const logActivity = (entry) => {
+    setActivities((current) => [
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, timestamp: Date.now(), ...entry },
+      ...current,
+    ]);
+  };
+
+  // Overview's Market Data card already says "● LIVE" in its label — this
+  // makes that true. Same fetch_market_price call MarketDataPage's own
+  // "Fetch prices" button makes, just triggered automatically on load
+  // instead of waiting for a click, since Overview has no button for it.
+  const [overviewRate, setOverviewRate] = useState(null);
+  const [overviewRateError, setOverviewRateError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    callTool("fetch_market_price", { token: "USDC", quote: "KES" })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success) {
+          setOverviewRate(res.data);
+        } else {
+          setOverviewRateError(res.error || "Unknown error");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setOverviewRateError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
  const sendMessage = async () => {
   if (!input.trim()) return;
@@ -109,26 +168,63 @@ function App() {
 
   setInput("");
 
+  // Real LLM-based routing first (Groq, server-side) — falls back to the
+  // keyword router below if GROQ_API_KEY isn't set on the backend yet, or
+  // if the LLM call itself fails for any reason, so the agent keeps
+  // working either way instead of hitting a dead end.
+  try {
+    const history = messages.slice(-8).map((m) => ({
+      role: m.role === "agent" ? "assistant" : "user",
+      content: m.text,
+    }));
+
+    const agentResponse = await fetch("/api/agent/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: userText, history }),
+    });
+    const agentResult = await agentResponse.json();
+
+    if (agentResult.configured && !agentResult.error) {
+      if (agentResult.tool_used && agentResult.tool_result?.success) {
+        const meta = TOOL_META[agentResult.tool_used] || { icon: "✦", title: agentResult.tool_used };
+        logActivity({
+          icon: meta.icon,
+          title: meta.title,
+          detail: "via AI Agent chat",
+          amount: agentResult.reply.length > 40 ? `${agentResult.reply.slice(0, 40)}...` : agentResult.reply,
+        });
+      }
+      setMessages((current) => [
+        ...current,
+        { role: "agent", text: agentResult.reply },
+      ]);
+      return;
+    }
+    // configured === false (no GROQ_API_KEY yet) or a Groq-side error —
+    // fall through to the keyword router rather than stopping here.
+  } catch {
+    // Couldn't even reach /api/agent/chat — also fall through.
+  }
+
   const { tool, payload, describe } = pickToolFromMessage(userText);
 
   try {
-    // Relative path: routed to the backend service in both local dev
-    // (via a dev proxy) and production (via the "/api" rewrite in
-    // vercel.json) — a hardcoded localhost URL only ever works on one
-    // machine.
-    const response = await fetch(`/api/tool/${tool}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await response.json();
+    const result = await callTool(tool, payload);
 
     const agentText = result.success
       ? describe(result.data)
       : `I couldn't complete that (${tool}): ${result.error || "Unknown error"}`;
+
+    if (result.success) {
+      const meta = TOOL_META[tool] || { icon: "✦", title: tool };
+      logActivity({
+        icon: meta.icon,
+        title: meta.title,
+        detail: "via AI Agent chat",
+        amount: agentText.length > 40 ? `${agentText.slice(0, 40)}...` : agentText,
+      });
+    }
 
     setMessages((current) => [
       ...current,
@@ -168,7 +264,16 @@ function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="logo">
-          <div className="logo-mark">G</div>
+          <div className="logo-mark">
+            <svg width="26" height="26" viewBox="-16 -16 32 32" aria-hidden="true">
+              <circle cx="0" cy="0" r="15" fill="none" stroke="#101400" strokeWidth="1.6" />
+              <path d="M 0,-15 A 11.49,15 0 0 1 0,15" fill="none" stroke="#101400" strokeWidth="1" opacity="0.75" />
+              <path d="M 0,-15 A 11.49,15 0 0 0 0,15" fill="none" stroke="#101400" strokeWidth="1" opacity="0.75" />
+              <path d="M -13.75 -6 Q 0 -3.3 13.75 -6" fill="none" stroke="#101400" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M -15 0 L 15 0" fill="none" stroke="#101400" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M -13.75 6 Q 0 3.3 13.75 6" fill="none" stroke="#101400" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </div>
 
           <div className="logo-text">
             <h1>Global Rails</h1>
@@ -412,27 +517,47 @@ function App() {
                     LAST EXECUTION
                   </span>
 
-                  <strong>No executions yet</strong>
-
-                  <span>
-                    Your agent activity will appear here.
-                  </span>
+                  {activities.length === 0 ? (
+                    <>
+                      <strong>No executions yet</strong>
+                      <span>Your agent activity will appear here.</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>{activities[0].title}</strong>
+                      <span>{activities[0].amount}</span>
+                    </>
+                  )}
                 </div>
               </aside>
             </div>
           </section>
+        ) : activePage === "Market Data" ? (
+          <MarketDataPage onExecuted={logActivity} />
+        ) : activePage === "Wallet" ? (
+          <WalletPage />
+        ) : activePage === "Swap" ? (
+          <SwapPage onExecuted={logActivity} />
+        ) : activePage === "Transfer" ? (
+          <TransferPage onExecuted={logActivity} />
+        ) : activePage === "x402 Payments" ? (
+          <X402Page onExecuted={logActivity} />
+        ) : activePage === "Activity" ? (
+          <ActivityPage activities={activities} />
+        ) : activePage === "Developer" ? (
+          <DeveloperPage />
         ) : (
           <section className="content">
             <div className="balance-card">
               <div>
                 <span className="card-label">
-                  TOTAL PORTFOLIO
+                  TOTAL PORTFOLIO (DEMO)
                 </span>
 
                 <h3>$1,248.32</h3>
 
-                <span className="positive">
-                  +2.84% today
+                <span className="demo-note">
+                  Demo balances — connect a wallet for live figures
                 </span>
               </div>
 
@@ -464,13 +589,19 @@ function App() {
                 </div>
 
                 <div className="rate">
-                  <strong>129.42</strong>
+                  <strong>{overviewRate ? overviewRate.rate : overviewRateError ? "—" : "…"}</strong>
                   <span>KES</span>
                 </div>
 
                 <div className="rate-footer">
                   <span>1 USDC</span>
-                  <span>Updated just now</span>
+                  <span>
+                    {overviewRate
+                      ? "Updated just now"
+                      : overviewRateError
+                        ? "Rate temporarily unavailable"
+                        : "Loading…"}
+                  </span>
                 </div>
               </div>
 
@@ -485,38 +616,25 @@ function App() {
                   </div>
                 </div>
 
-                <div className="activity">
-                  <div className="activity-icon">↗</div>
+                {activities.length === 0 ? (
+                  <p className="empty-state">
+                    Nothing yet — try a quick-reply in the AI Agent tab, or
+                    run a swap/transfer/x402 payment from their pages.
+                  </p>
+                ) : (
+                  activities.slice(0, 3).map((item) => (
+                    <div className="activity" key={item.id}>
+                      <div className="activity-icon">{item.icon}</div>
 
-                  <div>
-                    <strong>M-Pesa Transfer</strong>
-                    <span>50 USDC · Kenya</span>
-                  </div>
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span>{item.detail}</span>
+                      </div>
 
-                  <b>-50 USDC</b>
-                </div>
-
-                <div className="activity">
-                  <div className="activity-icon">⇄</div>
-
-                  <div>
-                    <strong>Token Swap</strong>
-                    <span>100 USDT → USDC</span>
-                  </div>
-
-                  <b>+99.72 USDC</b>
-                </div>
-
-                <div className="activity">
-                  <div className="activity-icon">₿</div>
-
-                  <div>
-                    <strong>x402 Payment</strong>
-                    <span>API access</span>
-                  </div>
-
-                  <b>-0.02 USDC</b>
-                </div>
+                      <b>{item.amount}</b>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

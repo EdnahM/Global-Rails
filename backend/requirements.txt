@@ -21,3 +21,7 @@ mcp[cli]>=1.8,<2
 fastapi>=0.110
 uvicorn>=0.29
 aiohttp
+
+# Used by the /api/agent/chat route to call Groq's OpenAI-compatible API
+# for real natural-language tool routing.
+httpx>=0.27

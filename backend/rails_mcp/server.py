@@ -56,6 +56,139 @@ try:
             payload = {}
         return JSONResponse(execute_tool_payload(tool_name, payload))
 
+    # -----------------------------------------------------------------------
+    # Real natural-language agent routing via Groq (OpenAI-compatible tool
+    # calling), replacing the frontend's keyword/regex matching for anything
+    # that doesn't fit its fixed patterns. The tool schemas below are built
+    # straight from each tool's own Pydantic input_schema — never hand
+    # duplicated — so this can't silently drift out of sync with the real
+    # tool definitions as they evolve.
+    # -----------------------------------------------------------------------
+    def _build_tool_schemas() -> list[dict]:
+        schemas = []
+        for tool in TOOLKIT.values() if isinstance(TOOLKIT, dict) else TOOLKIT:
+            params = tool.input_schema.model_json_schema()
+            params.pop("title", None)
+            for prop in params.get("properties", {}).values():
+                prop.pop("title", None)
+            schemas.append({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": params,
+                },
+            })
+        return schemas
+
+    def _format_reply(tool_name: str, result: dict) -> str:
+        if not result.get("success"):
+            return f"I couldn't complete that ({tool_name}): {result.get('error', 'Unknown error')}"
+        d = result.get("data", {}) or {}
+        if tool_name == "fetch_market_price":
+            return f"1 {d.get('token')} = {d.get('rate')} {d.get('quote')} on {d.get('chain')}."
+        if tool_name == "swap_tokens":
+            return (f"Swapped {d.get('amount_in')} {d.get('from_token')} for "
+                    f"{d.get('amount_out')} {d.get('to_token')} on {d.get('chain')} "
+                    f"(tx {str(d.get('tx_hash', ''))[:10]}...).")
+        if tool_name == "transfer":
+            return (f"Sent {d.get('amount')} {d.get('token')} to {d.get('to_address')} "
+                    f"(gas {d.get('gas_fee_usdc')} USDC).")
+        if tool_name == "off_ramp_payout":
+            return (f"Paid out {d.get('amount_delivered')} {d.get('currency')} to "
+                    f"{d.get('recipient')} via {d.get('network')} (ref {d.get('transaction_id')}).")
+        if tool_name == "x402_get_invoice":
+            return (f"Resolved invoice {d.get('invoice_id')}: {d.get('amount')} {d.get('token')} "
+                    f"on {d.get('chain')} (status {d.get('status')}).")
+        if tool_name == "x402_settle_invoice":
+            return f"Invoice settled — status {d.get('status')} (payment hash {str(d.get('payment_hash', ''))[:10]}...)."
+        return f"Done ({tool_name})."
+
+    GROQ_SYSTEM_PROMPT = (
+        "You are the Global Rails financial agent. You can check market rates, "
+        "swap tokens, transfer stablecoins, pay out to mobile money (M-Pesa/MoMo), "
+        "and resolve/settle x402 micropayments, by calling the tools provided. "
+        "Call a tool whenever the user's request maps to one, filling in every "
+        "argument you can infer from their message. Ask a brief clarifying "
+        "question only if a required argument is genuinely missing and can't "
+        "be reasonably defaulted. For anything else, just respond conversationally."
+    )
+
+    @mcp.custom_route("/api/agent/chat", methods=["POST"])
+    async def agent_chat_route(request: Request) -> JSONResponse:
+        import json
+        import os
+
+        import httpx
+
+        data = await request.json()
+        message = data.get("message", "")
+        history = data.get("history", [])
+
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+        if not groq_key:
+            return JSONResponse({"configured": False, "error": "GROQ_API_KEY is not set"})
+
+        model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+        messages = (
+            [{"role": "system", "content": GROQ_SYSTEM_PROMPT}]
+            + [{"role": h.get("role", "user"), "content": h.get("content", "")} for h in history]
+            + [{"role": "user", "content": message}]
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": messages,
+                        "tools": _build_tool_schemas(),
+                        "tool_choice": "auto",
+                        "temperature": 0.3,
+                    },
+                )
+            if resp.status_code != 200:
+                try:
+                    detail = resp.json().get("error", {}).get("message", resp.text[:200])
+                except Exception:
+                    detail = resp.text[:200] or f"HTTP {resp.status_code}"
+                return JSONResponse({"configured": True, "error": f"Groq returned {resp.status_code}: {detail}"})
+            result = resp.json()
+        except Exception as exc:
+            return JSONResponse({"configured": True, "error": f"LLM request failed: {exc}"})
+
+        if "error" in result:
+            return JSONResponse({"configured": True, "error": f"Groq error: {result['error'].get('message', result['error'])}"})
+
+        choice = (result.get("choices") or [{}])[0]
+        msg = choice.get("message", {})
+        tool_calls = msg.get("tool_calls")
+
+        if not tool_calls:
+            return JSONResponse({
+                "configured": True,
+                "reply": msg.get("content") or "I'm not sure how to help with that.",
+                "tool_used": None,
+            })
+
+        call = tool_calls[0]
+        tool_name = call.get("function", {}).get("name", "")
+        try:
+            args = json.loads(call.get("function", {}).get("arguments") or "{}")
+        except Exception:
+            args = {}
+
+        tool_result = execute_tool_payload(tool_name, args)
+        return JSONResponse({
+            "configured": True,
+            "reply": _format_reply(tool_name, tool_result),
+            "tool_used": tool_name,
+            "tool_args": args,
+            "tool_result": tool_result,
+        })
+
     app = mcp.streamable_http_app()
 
 except Exception as _startup_exc:  # noqa: BLE001 - intentionally broad, see docstring
