@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import { callTool } from "./api";
 import MarketDataPage from "./pages/MarketDataPage";
@@ -17,6 +17,30 @@ import DeveloperPage from "./pages/DeveloperPage";
 // what was typed. Swapping this for a real LLM tool-call later only means
 // replacing the body of this function; sendMessage() and the fetch call
 // don't need to change.
+// Turns any http(s) URL inside a plain message string into a real,
+// clickable link when rendered — used for both the keyword router's
+// describe() strings and the Groq agent's replies, since both just
+// produce plain text and neither needs to know this exists.
+function linkify(text) {
+  const urlRegex = /(https?:\/\/[^\s)]+)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const url = match[0];
+    const linkKey = match.index;
+    parts.push(React.createElement("a", { key: linkKey, href: url, target: "_blank", rel: "noopener noreferrer", className: "msg-link" }, url));
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
+
 function pickToolFromMessage(text) {
   // "Swap 100 USDT to USDC"
   const swapMatch = text.match(
@@ -31,7 +55,9 @@ function pickToolFromMessage(text) {
         to_token: swapMatch[3].toUpperCase(),
       },
       describe: (d) =>
-        `Swapped ${d.amount_in} ${d.from_token} for ${d.amount_out} ${d.to_token} on ${d.chain} (tx ${d.tx_hash.slice(0, 10)}...).`,
+        d.explorer_url
+          ? `Swapped ${d.amount_in} ${d.from_token} for ${d.amount_out} ${d.to_token} on ${d.chain} via ${d.dex}. Verify: ${d.explorer_url}`
+          : `Swapped ${d.amount_in} ${d.from_token} for ${d.amount_out} ${d.to_token} on ${d.chain} (tx ${d.tx_hash.slice(0, 10)}...).`,
     };
   }
 
@@ -393,7 +419,7 @@ function App() {
                       </div>
 
                       <div className="message-text">
-                        {message.text}
+                        {linkify(message.text)}
                       </div>
                     </div>
                   ))}

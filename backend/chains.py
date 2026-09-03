@@ -28,6 +28,8 @@ class Chain:
     stablecoins: tuple[str, ...] = field(default_factory=tuple)
     supports_paymaster: bool = False   # ERC-4337 / account-abstraction gas-in-USDC
     default_stablecoin: str = "USDC"
+    block_explorer: str = ""
+    tokens: dict = field(default_factory=dict)  # symbol -> checksum address, for real (non-simulated) tool paths
 
 
 # Global Rails defaults to Avalanche C-Chain. Paymaster means gas can be
@@ -42,6 +44,31 @@ AVALANCHE = Chain(
     default_stablecoin="USDC",
 )
 
+# Real (non-simulated) swap path lives here specifically - see swap/client.py.
+# Token addresses and the LFJ router below are the exact ones already
+# verified working end-to-end (a real STK... no, a real on-chain swap, with
+# an actual tx hash) on the global-rails branch - not newly guessed values.
+# Mainnet intentionally stays simulated for now: those would be different
+# contract addresses that haven't been independently verified here, and
+# mainnet means real funds - not something to extend by assumption.
+AVALANCHE_FUJI = Chain(
+    name="avalanche-fuji",
+    chain_id=43113,
+    native_asset="AVAX",
+    rpc_url="https://api.avax-test.network/ext/bc/C/rpc",
+    stablecoins=("USDC",),
+    supports_paymaster=False,
+    default_stablecoin="USDC",
+    block_explorer="https://testnet.snowtrace.io",
+    tokens={
+        # LFJ's own test USDC - not Circle's testnet USDC, which has no
+        # liquidity pool against WAVAX on LFJ's router.
+        "USDC": "0xB6076C93701D6a07266c31066B298AeC6dd65c2d",
+        "WAVAX": "0xd00ae08403B9bbb9124bB305C09058E32C39A48c",
+        "LINK": "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
+    },
+)
+
 
 # any other further network can be added here, like its Avalanche focused, but can add
 # other networks here, (e.g. ETHEREUM = Chain(...)) and include in CHAINS
@@ -50,7 +77,7 @@ AVALANCHE = Chain(
 
 # Chains known to the toolkit. Keyed by canonical slug.
 CHAINS: dict[str, Chain] = {
-    c.name: c for c in (AVALANCHE,)
+    c.name: c for c in (AVALANCHE, AVALANCHE_FUJI)
 }
 
 DEFAULT_CHAIN = AVALANCHE.name

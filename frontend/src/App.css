@@ -569,6 +569,16 @@ button {
   line-height: 1.55;
 }
 
+.msg-link {
+  color: #d9ff4f;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.msg-link:hover {
+  opacity: 0.8;
+}
+
 .chat-suggestions {
   display: flex;
   flex-wrap: wrap;
