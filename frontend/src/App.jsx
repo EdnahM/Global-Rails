@@ -53,6 +53,7 @@ function pickToolFromMessage(text) {
         amount: parseFloat(swapMatch[1]),
         from_token: swapMatch[2].toUpperCase(),
         to_token: swapMatch[3].toUpperCase(),
+        chain: "avalanche-fuji",
       },
       describe: (d) =>
         d.explorer_url
@@ -439,11 +440,11 @@ function App() {
                   <button
                     onClick={() =>
                       applySuggestion(
-                        "Swap 100 USDT to USDC"
+                        "Swap 10 USDC to LINK"
                       )
                     }
                   >
-                    Swap 100 USDT
+                    Swap 10 USDC
                   </button>
 
                   <button

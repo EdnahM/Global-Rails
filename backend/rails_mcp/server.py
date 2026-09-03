@@ -137,7 +137,10 @@ try:
         "Call a tool whenever the user's request maps to one, filling in every "
         "argument you can infer from their message. Ask a brief clarifying "
         "question only if a required argument is genuinely missing and can't "
-        "be reasonably defaulted. For anything else, just respond conversationally."
+        "be reasonably defaulted. For anything else, just respond conversationally. "
+        "For swap_tokens specifically, unless the user names a different chain, "
+        "always pass chain=\"avalanche-fuji\" - that's the only chain with real "
+        "on-chain execution wired up right now; other chains stay simulated."
     )
 
     @mcp.custom_route("/api/agent/chat", methods=["POST"])

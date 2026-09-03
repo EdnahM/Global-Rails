@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { callTool } from "../api";
 
-const TOKENS = ["USDC", "USDT", "AVAX"];
+// Matches what's actually configured on avalanche-fuji (chains.py) — USDT
+// was never in that token set, so offering it here would fail outright.
+const TOKENS = ["USDC", "LINK", "AVAX"];
 
 function SwapPage({ onExecuted }) {
-  const [fromToken, setFromToken] = useState("USDT");
-  const [toToken, setToToken] = useState("USDC");
-  const [amount, setAmount] = useState("100");
+  const [fromToken, setFromToken] = useState("USDC");
+  const [toToken, setToToken] = useState("LINK");
+  const [amount, setAmount] = useState("10");
   const [slippage, setSlippage] = useState("0.5");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -23,6 +25,12 @@ function SwapPage({ onExecuted }) {
         to_token: toToken,
         amount: parseFloat(amount),
         slippage: parseFloat(slippage),
+        // avalanche-fuji is the only chain with real execution wired up
+        // right now (see backend/swap/client.py) — previously no chain
+        // was sent at all, silently falling through to the tool's own
+        // mainnet default, which is always simulated regardless of what
+        // was picked here.
+        chain: "avalanche-fuji",
       });
 
       if (res.success) {
@@ -140,6 +148,12 @@ function SwapPage({ onExecuted }) {
               <span>Tx hash</span>
               <span>{result.tx_hash}</span>
             </div>
+            {result.explorer_url && (
+              <div className="result-row">
+                <span>Verify</span>
+                <a href={result.explorer_url} target="_blank" rel="noopener noreferrer" className="msg-link">{result.explorer_url}</a>
+              </div>
+            )}
           </div>
         )}
       </div>
