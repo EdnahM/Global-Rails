@@ -128,8 +128,13 @@ CHAINS: dict[str, dict] = {
         "block_explorer": "https://testnet.snowtrace.io",
         "is_poa": False,
         "tokens": {
-            "USDC": "0x5425890298aed601595a70AB815c96711a31Bc65",
+            # LFJ's own test USDC — NOT Circle's testnet USDC, which has no
+            # liquidity pool against WAVAX on LFJ's router. Swaps against
+            # the old address here would have failed silently for lack of
+            # a route, not because anything was technically broken.
+            "USDC": "0xB6076C93701D6a07266c31066B298AeC6dd65c2d",
             "WAVAX": "0xd00ae08403B9bbb9124bB305C09058E32C39A48c",
+            "LINK": "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
         },
     },
 }

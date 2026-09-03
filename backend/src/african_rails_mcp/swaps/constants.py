@@ -131,3 +131,12 @@ EXCHANGE_PROVIDER_ABI = [
         ],
     }
 ]
+
+# LFJ (formerly Trader Joe) router — Avalanche's native DEX, used for chains
+# where Uniswap V3 either isn't configured (Fuji testnet) or has negligible
+# testnet liquidity. Address verified against
+# https://developers.lfj.gg/deployment-addresses/fuji and confirmed working
+# end-to-end in a live bot before being added here.
+LFJ_ROUTER = {
+    "avalanche-fuji": "0xd7f655E3376cE2D7A2b08fF01Eb3B1023191A901",
+}
