@@ -6,6 +6,8 @@ oracle; it can be extended to read on-chain DEX pools per chain without
 changing the tool surface.
 """
 
+import time
+
 import requests
 
 from chains import CHAINS, get_chain
@@ -28,15 +30,35 @@ COINGECKO_BASE = "https://api.coingecko.com/api/v3/simple/price"
 # currencies are supported (the SDK's whole pitch is KES/NGN/GHS).
 FIAT_CURRENCIES = {"USD", "KES", "NGN", "GHS"}
 
+# CoinGecko's free tier rate-limits aggressively (a handful of calls per
+# minute). The same (token, fiat) pair gets asked for repeatedly in short
+# bursts - multiple people clicking the same quick-reply, or one person
+# clicking it a few times - so a short cache absorbs nearly all of that
+# without the rate actually going stale in any way that matters for a
+# dashboard display. 30s is short enough that nobody would notice the
+# rate isn't live-live, long enough to collapse a burst of clicks into a
+# single real API call.
+_price_cache: dict[str, tuple[float, float]] = {}
+_CACHE_TTL_SECONDS = 30
+
 
 def _fiat_quote(token: str, fiat: str) -> float:
     """Return token->fiat rate via CoinGecko (public fallback oracle)."""
+    cache_key = f"{token.upper()}:{fiat.upper()}"
+    now = time.time()
+    cached = _price_cache.get(cache_key)
+    if cached is not None and (now - cached[1]) < _CACHE_TTL_SECONDS:
+        return cached[0]
+
     coin_id = COINGECKO_IDS.get(token.upper(), COINGECKO_IDS["USDC"])
     url = f"{COINGECKO_BASE}?ids={coin_id}&vs_currencies={fiat.lower()}"
     res = requests.get(url, timeout=10)
     res.raise_for_status()
     data = res.json()
-    return float(data.get(coin_id, {}).get(fiat.lower(), 1.0))
+    rate = float(data.get(coin_id, {}).get(fiat.lower(), 1.0))
+
+    _price_cache[cache_key] = (rate, now)
+    return rate
 
 
 def _token_quote(base: str, quote: str) -> float:

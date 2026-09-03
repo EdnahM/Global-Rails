@@ -35,18 +35,26 @@ function pickToolFromMessage(text) {
     };
   }
 
-  // "Send 20 USDC to M-Pesa"
+  // "Send 20 USDC to M-Pesa 0712345678" or "Send 20 KES to 254712345678"
   if (/m-?pesa|momo|mobile money|off.?ramp|payout/i.test(text)) {
     const amountMatch = text.match(/([\d.]+)\s*([a-zA-Z]+)/);
+    // Kenyan mobile format: 07XXXXXXXX / 01XXXXXXXX / 2547XXXXXXXX / +254...
+    const phoneMatch = text.match(/(?:\+?254|0)([71]\d{8})\b/);
     return {
       tool: "off_ramp_payout",
       payload: {
         amount: amountMatch ? parseFloat(amountMatch[1]) : 20,
         currency: "KES",
-        phone_number: "254700000000", // demo recipient — testnet/simulated only
+        // Falls back to the demo placeholder only when no real number was
+        // typed (e.g. the quick-reply button's canned message) — was
+        // previously hardcoded unconditionally, silently ignoring any
+        // number the user actually specified.
+        phone_number: phoneMatch ? phoneMatch[0] : "254700000000",
       },
       describe: (d) =>
-        `Paid out ${d.amount_delivered} ${d.currency} to ${d.recipient} via ${d.network} (ref ${d.transaction_id}).`,
+        d.status === "PENDING"
+          ? `${d.message} (tracking ID: ${d.checkout_request_id})`
+          : `Paid out ${d.amount_delivered} ${d.currency} to ${d.recipient} via ${d.network} (ref ${d.transaction_id}).`,
     };
   }
 
