@@ -57,6 +57,32 @@ try:
         return JSONResponse(execute_tool_payload(tool_name, payload))
 
     # -----------------------------------------------------------------------
+    # M-Pesa STK Push - the actual push is triggered through the existing
+    # /api/tool/off_ramp_payout route above (off_ramp/client.py now sends a
+    # real push when Daraja is configured, returning PENDING + a
+    # checkout_request_id instead of an immediate fake SUCCESS). These two
+    # routes handle the other half: Safaricom's own callback, and the
+    # frontend polling for a result once the customer responds.
+    # -----------------------------------------------------------------------
+    from off_ramp.mpesa_daraja import handle_callback, get_stk_status
+
+    @mcp.custom_route("/api/mpesa/callback", methods=["POST"])
+    async def mpesa_callback_route(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        handle_callback(payload)
+        # Safaricom expects this specific ack shape, not just any 200 -
+        # an unexpected body can cause it to retry the callback.
+        return JSONResponse({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+    @mcp.custom_route("/api/mpesa/status/{checkout_request_id}", methods=["GET"])
+    async def mpesa_status_route(request: Request) -> JSONResponse:
+        checkout_id = request.path_params["checkout_request_id"]
+        return JSONResponse(get_stk_status(checkout_id))
+
+    # -----------------------------------------------------------------------
     # Real natural-language agent routing via Groq (OpenAI-compatible tool
     # calling), replacing the frontend's keyword/regex matching for anything
     # that doesn't fit its fixed patterns. The tool schemas below are built
